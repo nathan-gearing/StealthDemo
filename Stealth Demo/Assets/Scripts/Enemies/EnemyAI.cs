@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
 
@@ -5,6 +6,7 @@ public class EnemyAI : MonoBehaviour
 {
     public enum EnemyState { Patrolling, Chasing, Returning}
     private EnemyState currentState = EnemyState.Patrolling;
+    
 
     public Transform[] patrolPoints;
     public float patrolSpeed = 2f;
@@ -19,7 +21,19 @@ public class EnemyAI : MonoBehaviour
     private int currentPointIndex = 0;
     private Vector3 lastKnownPosition;
     private float timeSinceLastSeen = 0f;
-    
+    private Rigidbody rb;
+
+    private void Start()
+    {
+        rb = GetComponent<Rigidbody>();
+        if (rb == null )
+        {
+            Debug.LogError("no rigidbody");
+        }
+
+        
+    }
+
     // Update is called once per frame
     void Update()
     {
@@ -37,10 +51,18 @@ public class EnemyAI : MonoBehaviour
                 break;
 
         }
+        //Debug.Log("Enemy State: " +  currentState);
+
     }
 
     void Patrol()
     {
+        if (patrolPoints == null || patrolPoints.Length == 0)
+        {
+            Debug.Log("no patrolPoibts");
+            return;
+        }
+        
         Vector3 target = patrolPoints[currentPointIndex].position;
         MoveTowards(target, patrolSpeed);
 
@@ -55,7 +77,10 @@ public class EnemyAI : MonoBehaviour
         Vector3 directionToPlayer = (player.position - transform.position).normalized;
         float angle = Vector3.Angle(transform.forward, directionToPlayer);
 
-        if (Vector3.Distance(transform.position, player.position) < viewDistance && angle < viewAngle / 2f)
+        float currentViewDistance = FirstPersonController.Instance.isCrouching ? viewDistance * 0.5f : viewDistance;
+        float currentViewAngle = FirstPersonController.Instance.isCrouching ? viewAngle * 0.7f : viewAngle;
+
+        if (Vector3.Distance(transform.position, player.position) < currentViewDistance && angle < currentViewAngle / 2f)
         {
             if (!Physics.Linecast(transform.position, player.position, obstructionMask))
             {
@@ -99,16 +124,20 @@ public class EnemyAI : MonoBehaviour
     void MoveTowards(Vector3 target, float speed)
     {
         Vector3 dir = (target - transform.position).normalized;
-        transform.position += dir * speed * Time.deltaTime;
-        transform.rotation = Quaternion.LookRotation(dir);
+        rb.MovePosition(transform.position + dir * speed * Time.deltaTime);
+        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), Time.deltaTime * 5f);
     }
 
     bool CanSeePlayer()
     {
+        if (FirstPersonController.Instance == null) return false;
         Vector3 directionToPlayer = (player.position - transform.position).normalized;
         float angle = Vector3.Angle(transform.forward, directionToPlayer);
 
-        if (Vector3.Distance(transform.position, player.position) < viewDistance && angle < viewAngle / 2f)
+        float currentViewDistance = FirstPersonController.Instance.isCrouching ? viewDistance * 0.5f : viewDistance;
+        float currentViewAngle = FirstPersonController.Instance.isCrouching ? viewAngle * 0.7f : viewAngle;
+
+        if (Vector3.Distance(transform.position, player.position) < currentViewDistance && angle < currentViewAngle / 2f)
         {
             if (!Physics.Linecast(transform.position, player.position, obstructionMask))
             {
@@ -118,22 +147,59 @@ public class EnemyAI : MonoBehaviour
         return false;
     }
 
+    public void OnHearNoise(Vector3 sourcePosition)
+    {
+        if (currentState == EnemyState.Patrolling)
+        {
+            lastKnownPosition = sourcePosition;
+            currentState = EnemyState.Chasing;
+            Debug.Log("Enemy heard noise!");
+        }
+    }
+
+
     void OnDrawGizmosSelected()
     {
-        // Vision radius
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(transform.position, viewDistance);
+        
+        if (FirstPersonController.Instance == null) return; 
+        if (player == null) return;
 
-        // Vision cone
-        Vector3 leftBoundary = Quaternion.Euler(0, -viewAngle / 2f, 0) * transform.forward;
-        Vector3 rightBoundary = Quaternion.Euler(0, viewAngle / 2f, 0) * transform.forward;
+        float currentViewDistance = FirstPersonController.Instance != null && FirstPersonController.Instance.isCrouching
+            ? viewDistance * 0.5f
+            : viewDistance;
+
+        float currentViewAngle = FirstPersonController.Instance != null && FirstPersonController.Instance.isCrouching
+            ? viewAngle * 0.7f
+            : viewAngle;
+
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(transform.position, currentViewDistance);
+
+        Vector3 forward = transform.forward;
+
+        int segments = 30;
+        float angleStep = currentViewAngle / segments;
 
         Gizmos.color = Color.cyan;
-        Gizmos.DrawLine(transform.position, transform.position + leftBoundary * viewDistance);
-        Gizmos.DrawLine(transform.position, transform.position + rightBoundary * viewDistance);
+        for (int i = 0; i < segments; i++)
+        {
+            float angleA = -currentViewAngle / 2 + angleStep * i;
+            float angleB = angleA + angleStep;
+
+            Vector3 dirA = Quaternion.Euler(0, angleA, 0) * forward;
+            Vector3 dirB = Quaternion.Euler(0, angleB, 0) * forward;
+
+            Vector3 pointA = transform.position + dirA * currentViewDistance;
+            Vector3 pointB = transform.position + dirB * currentViewDistance;
+
+            Gizmos.DrawLine(transform.position, pointA);
+            Gizmos.DrawLine(pointA, pointB);
+        }
+
+
 
         // Line to player if visible
-        if (player != null && CanSeePlayer())
+        if (CanSeePlayer())
         {
             Gizmos.color = Color.red;
             Gizmos.DrawLine(transform.position, player.position);

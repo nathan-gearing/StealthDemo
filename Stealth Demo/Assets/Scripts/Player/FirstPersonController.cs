@@ -10,6 +10,7 @@ public class FirstPersonController : MonoBehaviour
     public float gravity = -9.81f;
     public Transform cameraTransform;
     public CharacterController controller;
+    public static FirstPersonController Instance { get; private set; }
 
     public float crouchHeight = 0.5f;
     public float standingHeight = 1f;
@@ -27,8 +28,12 @@ public class FirstPersonController : MonoBehaviour
     private Vector3 originalCameraPosition;
     private float bobTimer = 0f;
     private float baseCameraHeight;
-    
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
+     void Awake()
+    {
+        Instance = this;
+    }
     void Start()
     {
         Cursor.lockState = CursorLockMode.Locked;
@@ -131,6 +136,7 @@ public class FirstPersonController : MonoBehaviour
     void ToggleCrouch()
     {
         isCrouching = !isCrouching;
+        bobTimer = 0f;
         /*if (currentState != PlayerState.Crouching)
         {
             currentState = PlayerState.Crouching;
