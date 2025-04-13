@@ -1,10 +1,11 @@
 using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
+using UnityEngine.AI;
 
 public class EnemyAI : MonoBehaviour
 {
-    public enum EnemyState { Patrolling, Chasing, Returning}
+    public enum EnemyState { Patrolling, Suspicious, Chasing, Returning}
     private EnemyState currentState = EnemyState.Patrolling;
     
 
@@ -17,18 +18,26 @@ public class EnemyAI : MonoBehaviour
     public LayerMask obstructionMask;
     public Transform player;
     public float loseSightTime = 3f;
+    public float suspicionDuration = 4f;
+    public float maxSuspicion = 100f;
+    public float suspicionIncreaseRate = 40f;
+    public float suspicionDecreaseRate = 20f;
 
+    private NavMeshAgent agent;
+    private float currentSuspicion = 0f;
+    private bool playerInSusRange = false;
+    private float suspicionTimer = 0f;
     private int currentPointIndex = 0;
     private Vector3 lastKnownPosition;
     private float timeSinceLastSeen = 0f;
-    private Rigidbody rb;
+
 
     private void Start()
     {
-        rb = GetComponent<Rigidbody>();
-        if (rb == null )
+       agent = GetComponent<NavMeshAgent>();
+        if (agent == null )
         {
-            Debug.LogError("no rigidbody");
+            Debug.LogError("no nav agent");
         }
 
         
@@ -43,6 +52,10 @@ public class EnemyAI : MonoBehaviour
                 Patrol();
                 LookForPlayer();
                 break;
+            case EnemyState.Suspicious:
+                InvestigateSuspicion();
+                LookForPlayer();
+                break;
             case EnemyState.Chasing:
                 ChasePlayer();
                 break;
@@ -51,6 +64,8 @@ public class EnemyAI : MonoBehaviour
                 break;
 
         }
+
+        UpdateSuspicionMeter();
         //Debug.Log("Enemy State: " +  currentState);
 
     }
@@ -64,7 +79,7 @@ public class EnemyAI : MonoBehaviour
         }
         
         Vector3 target = patrolPoints[currentPointIndex].position;
-        MoveTowards(target, patrolSpeed);
+        agent.SetDestination(target);
 
         if (Vector3.Distance(transform.position, target) < 0.2f)
         {
@@ -93,7 +108,7 @@ public class EnemyAI : MonoBehaviour
 
     void ChasePlayer()
     {
-        MoveTowards(player.position, chaseSpeed);
+        agent.SetDestination(player.position);
 
         if (!CanSeePlayer())
         {
@@ -101,7 +116,9 @@ public class EnemyAI : MonoBehaviour
 
             if (timeSinceLastSeen >= loseSightTime)
             {
-                currentState = EnemyState.Returning;
+                currentState = EnemyState.Suspicious;
+                suspicionTimer = suspicionDuration;
+                agent.SetDestination(lastKnownPosition);
             }
         }
         else
@@ -111,9 +128,20 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
+    void InvestigateSuspicion()
+    {
+        agent.SetDestination(lastKnownPosition);
+
+        suspicionTimer -= Time.deltaTime;
+        if (Vector3.Distance(transform.position, lastKnownPosition) < 0.5f || suspicionTimer <= 0f)
+        {
+            currentState = EnemyState.Returning;
+        }
+    }
+
     void ReturnToPatrol()
     {
-        MoveTowards(lastKnownPosition, patrolSpeed);
+        agent.SetDestination(lastKnownPosition);
 
         if (Vector3.Distance(transform.position, lastKnownPosition) < 0.2f)
         {
@@ -121,12 +149,6 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
-    void MoveTowards(Vector3 target, float speed)
-    {
-        Vector3 dir = (target - transform.position).normalized;
-        rb.MovePosition(transform.position + dir * speed * Time.deltaTime);
-        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(dir), Time.deltaTime * 5f);
-    }
 
     bool CanSeePlayer()
     {
@@ -141,6 +163,7 @@ public class EnemyAI : MonoBehaviour
         {
             if (!Physics.Linecast(transform.position, player.position, obstructionMask))
             {
+                lastKnownPosition = player.position;
                 return true;
             }
         }
@@ -149,11 +172,63 @@ public class EnemyAI : MonoBehaviour
 
     public void OnHearNoise(Vector3 sourcePosition)
     {
-        if (currentState == EnemyState.Patrolling)
+        if (currentState == EnemyState.Patrolling || currentState == EnemyState.Returning)
         {
             lastKnownPosition = sourcePosition;
-            currentState = EnemyState.Chasing;
+            suspicionTimer = suspicionDuration;
+            currentState = EnemyState.Suspicious;
+            currentSuspicion = Mathf.Clamp(currentSuspicion + 25f, 0, maxSuspicion);
             Debug.Log("Enemy heard noise!");
+        }
+    }
+
+    void UpdateSuspicionMeter()
+    {
+        if (currentState == EnemyState.Patrolling || currentState == EnemyState.Suspicious)
+        {
+            if (CanSeePlayer())
+            {
+                playerInSusRange = true;
+                currentSuspicion += suspicionIncreaseRate * Time.deltaTime;
+                
+
+                if (currentSuspicion >= maxSuspicion)
+                {
+                    currentSuspicion = maxSuspicion;
+                    currentState = EnemyState.Chasing;
+                    timeSinceLastSeen = 0f;
+                }
+                else if (currentState != EnemyState.Suspicious)
+                {
+                    currentState = EnemyState.Suspicious;
+                }
+            }
+            else
+            {
+                playerInSusRange = false;
+                if (currentSuspicion > 0)
+                {
+                    currentSuspicion -= suspicionDecreaseRate * Time.deltaTime;
+                    if (currentSuspicion <= 0)
+                    {
+                        currentSuspicion = 0;
+                        if (currentState == EnemyState.Suspicious && !playerInSusRange)
+                        {
+                            currentState = EnemyState.Returning;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void OnGUI()
+    {
+        Vector3 screenPos = Camera.main.WorldToScreenPoint(transform.position + Vector3.up * 2f);
+        if (screenPos.z > 0)
+        {
+            GUI.color = Color.red;
+            GUI.Label(new Rect(screenPos.x, Screen.height - screenPos.y, 100, 20), $"Suspicion: {currentSuspicion:F0}");
         }
     }
 

@@ -56,6 +56,7 @@ public class FootstepNoise : MonoBehaviour
         foreach (var hit in hitColliders)
         {
             hit.GetComponent<EnemyAI>()?.OnHearNoise(transform.position);
+            Debug.Log("Enemy Hit");
         }
 
         Debug.DrawLine(transform.position, transform.position + Vector3.up * 2f, Color.yellow, 0.2f);
