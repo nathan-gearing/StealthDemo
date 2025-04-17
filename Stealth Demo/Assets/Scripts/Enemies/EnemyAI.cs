@@ -30,6 +30,7 @@ public class EnemyAI : MonoBehaviour
     private int currentPointIndex = 0;
     private Vector3 lastKnownPosition;
     private float timeSinceLastSeen = 0f;
+    private Animator animator;
 
 
     private void Start()
@@ -39,7 +40,8 @@ public class EnemyAI : MonoBehaviour
         {
             Debug.LogError("no nav agent");
         }
-
+        
+        animator = GetComponent<Animator>();
         
     }
 
@@ -49,21 +51,29 @@ public class EnemyAI : MonoBehaviour
         switch (currentState)
         {
             case EnemyState.Patrolling:
+                agent.speed = patrolSpeed;
                 Patrol();
                 LookForPlayer();
                 break;
             case EnemyState.Suspicious:
+                agent.speed = patrolSpeed;
                 InvestigateSuspicion();
                 LookForPlayer();
                 break;
             case EnemyState.Chasing:
+                agent.speed = chaseSpeed;
                 ChasePlayer();
+                lastKnownPosition = player.position;
                 break;
             case EnemyState.Returning:
+                agent.speed = patrolSpeed;
                 ReturnToPatrol();
                 break;
 
         }
+
+        float speed = agent.velocity.magnitude;
+        animator.SetFloat("Speed", speed);
 
         UpdateSuspicionMeter();
         //Debug.Log("Enemy State: " +  currentState);
@@ -79,6 +89,7 @@ public class EnemyAI : MonoBehaviour
         }
         
         Vector3 target = patrolPoints[currentPointIndex].position;
+        target.y = transform.position.y;
         agent.SetDestination(target);
 
         if (Vector3.Distance(transform.position, target) < 0.2f)
@@ -100,7 +111,7 @@ public class EnemyAI : MonoBehaviour
             if (!Physics.Linecast(transform.position, player.position, obstructionMask))
             {
                 currentState = EnemyState.Chasing;
-                lastKnownPosition = player.position;
+                //lastKnownPosition = player.position;
                 timeSinceLastSeen = 0f;
             }
         }
@@ -123,7 +134,7 @@ public class EnemyAI : MonoBehaviour
         }
         else
         {
-            lastKnownPosition = player.position;
+            //lastKnownPosition = player.position;
             timeSinceLastSeen = 0f;
         }
     }
@@ -141,9 +152,11 @@ public class EnemyAI : MonoBehaviour
 
     void ReturnToPatrol()
     {
-        agent.SetDestination(lastKnownPosition);
+        Vector3 target = patrolPoints[currentPointIndex].position;
+        target.y = transform.position.y;
+        agent.SetDestination(target);
 
-        if (Vector3.Distance(transform.position, lastKnownPosition) < 0.2f)
+        if (Vector3.Distance(transform.position, target) < 0.2f)
         {
             currentState = EnemyState.Patrolling;
         }
@@ -220,6 +233,24 @@ public class EnemyAI : MonoBehaviour
                 }
             }
         }
+    }
+
+    Transform GetClosestPatrolPoint()
+    {
+        Transform closest = patrolPoints[0];
+        float closestDist = Vector3.Distance(transform.position, closest.position);
+
+        foreach (Transform point in patrolPoints)
+        {
+            float dist = Vector3.Distance(transform.position, point.position);
+            if (dist < closestDist)
+            {
+                closest = point;
+                closestDist = dist;
+            }
+        }
+
+        return closest;
     }
 
     private void OnGUI()
