@@ -22,6 +22,9 @@ public class EnemyAI : MonoBehaviour
     public float maxSuspicion = 100f;
     public float suspicionIncreaseRate = 40f;
     public float suspicionDecreaseRate = 20f;
+    public float waitDuration = 2f;
+    public float lookAngle = 30f;
+    public float lookSpeed = 2f;
 
     private NavMeshAgent agent;
     private float currentSuspicion = 0f;
@@ -31,6 +34,11 @@ public class EnemyAI : MonoBehaviour
     private Vector3 lastKnownPosition;
     private float timeSinceLastSeen = 0f;
     private Animator animator;
+    private float waitTimer = 0f;
+    private bool isWaiting = false;
+    private Quaternion initialRotation;
+    private bool isReturnRotation;
+    private float rotationReturnSpeed = 180f;
 
 
     private void Start()
@@ -84,7 +92,42 @@ public class EnemyAI : MonoBehaviour
     {
         if (patrolPoints == null || patrolPoints.Length == 0)
         {
-            Debug.Log("no patrolPoibts");
+            Debug.Log("no patrolPoints");
+            return;
+        }
+        
+        if (isWaiting)
+        {
+            waitTimer += Time.deltaTime;
+
+            if (!isReturnRotation)
+            {
+                float angleOffset = Mathf.Sin(waitTimer * lookSpeed) * lookAngle;
+                Quaternion lookRotation = Quaternion.Euler(0f, initialRotation.eulerAngles.y + angleOffset, 0f);
+                transform.rotation = lookRotation;
+            }
+            
+
+            if (waitTimer >= waitDuration)
+            {
+                agent.isStopped = true;
+                isReturnRotation = true;
+            }
+
+            if (isReturnRotation)
+            {
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, initialRotation, rotationReturnSpeed * Time.deltaTime);
+
+                if (Quaternion.Angle(transform.rotation, initialRotation) < 1f)
+                {
+                    isReturnRotation = false;
+                    isWaiting = false;
+                    waitTimer = 0;
+
+                    agent.isStopped = false;
+                    currentPointIndex = (currentPointIndex + 1) % patrolPoints.Length;
+                }
+            }
             return;
         }
         
@@ -92,9 +135,13 @@ public class EnemyAI : MonoBehaviour
         target.y = transform.position.y;
         agent.SetDestination(target);
 
-        if (Vector3.Distance(transform.position, target) < 0.2f)
+        if (Vector3.Distance(transform.position, target) < 0.2f && !isWaiting)
         {
-            currentPointIndex = (currentPointIndex + 1) % patrolPoints.Length;
+            isWaiting = true;
+            waitTimer = 0;
+            initialRotation = transform.rotation;
+            agent.ResetPath();
+            //currentPointIndex = (currentPointIndex + 1) % patrolPoints.Length;
         }
     }
 
