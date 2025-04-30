@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering;
 
 public class FootstepNoise : MonoBehaviour
 {
@@ -49,18 +50,19 @@ public class FootstepNoise : MonoBehaviour
         } 
     }
 
-    void EmitFootstepNoise(float radius)
+    void EmitFootstepNoise(float volume)
     {
-        Collider[] hitColliders = Physics.OverlapSphere(transform.position, radius, LayerMask.GetMask("Enemy"));
+        float maxRadius = volume;
+        Collider[] hitColliders = Physics.OverlapSphere(transform.position, maxRadius, LayerMask.GetMask("Enemy"));
 
         foreach (var hit in hitColliders)
         {
-            hit.GetComponent<EnemyAI>()?.OnHearNoise(transform.position);
+            hit.GetComponent<EnemyAI>()?.OnHearNoise(transform.position, volume);
             Debug.Log("Enemy Hit");
         }
 
         Debug.DrawLine(transform.position, transform.position + Vector3.up * 2f, Color.yellow, 0.2f);
-        DebugExtension.DrawCircle(transform.position, Vector3.up, Color.yellow, radius);
+        DebugExtension.DrawCircle(transform.position, Vector3.up, Color.yellow, maxRadius);
     }
 
 }

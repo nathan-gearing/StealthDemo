@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.Rendering;
 
 public class EnemyAI : MonoBehaviour
 {
@@ -39,6 +40,8 @@ public class EnemyAI : MonoBehaviour
     private Quaternion initialRotation;
     private bool isReturnRotation;
     private float rotationReturnSpeed = 180f;
+    private float currentNoisePriority;
+    
 
 
     private void Start()
@@ -230,15 +233,28 @@ public class EnemyAI : MonoBehaviour
         return false;
     }
 
-    public void OnHearNoise(Vector3 sourcePosition)
+    public void OnHearNoise(Vector3 sourcePosition, float volume)
     {
-        if (currentState == EnemyState.Patrolling || currentState == EnemyState.Returning)
+        float distance = Vector3.Distance(transform.position, sourcePosition);
+        float priority = volume / distance;
+
+        if (currentState == EnemyState.Chasing)
         {
+            return;
+        }
+
+        if (priority <= currentNoisePriority)
+        {
+            return;
+        }
+
+        if (priority > currentNoisePriority)
+        {
+            currentNoisePriority = priority;
             lastKnownPosition = sourcePosition;
-            suspicionTimer = suspicionDuration;
             currentState = EnemyState.Suspicious;
-            currentSuspicion = Mathf.Clamp(currentSuspicion + 25f, 0, maxSuspicion);
-            Debug.Log("Enemy heard noise!");
+            suspicionTimer = suspicionDuration;
+            agent.SetDestination(lastKnownPosition);
         }
     }
 
