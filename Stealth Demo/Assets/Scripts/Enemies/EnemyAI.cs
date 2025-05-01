@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
@@ -26,7 +27,13 @@ public class EnemyAI : MonoBehaviour
     public float waitDuration = 2f;
     public float lookAngle = 30f;
     public float lookSpeed = 2f;
+    public float attackRange = 1.5f;
+    public float attackCooldown = 1.5f;
+    public float attackWindupTimer = 0.5f;
+    public float predictionFactor = 0.4f;
 
+    private float lastAttackTime = -Mathf.Infinity;
+    private bool isAttacking = false;
     private NavMeshAgent agent;
     private float currentSuspicion = 0f;
     private bool playerInSusRange = false;
@@ -41,7 +48,7 @@ public class EnemyAI : MonoBehaviour
     private bool isReturnRotation;
     private float rotationReturnSpeed = 180f;
     private float currentNoisePriority;
-    
+    Rigidbody playerRb;
 
 
     private void Start()
@@ -53,7 +60,9 @@ public class EnemyAI : MonoBehaviour
         }
         
         animator = GetComponent<Animator>();
-        
+
+        playerRb = player.GetComponent<Rigidbody>();
+
     }
 
     // Update is called once per frame
@@ -85,6 +94,11 @@ public class EnemyAI : MonoBehaviour
 
         float speed = agent.velocity.magnitude;
         animator.SetFloat("Speed", speed);
+
+        if (!isAttacking && Time.time - lastAttackTime >= attackCooldown && InAttackRange())
+        {
+            StartCoroutine(PerformAttack());
+        }
 
         UpdateSuspicionMeter();
         //Debug.Log("Enemy State: " +  currentState);
@@ -316,6 +330,42 @@ public class EnemyAI : MonoBehaviour
         return closest;
     }
 
+    bool InAttackRange()
+    {
+        return Vector3.Distance(transform.position, player.position) <= attackRange;
+    }
+
+    [System.Obsolete]
+    IEnumerator PerformAttack()
+    {
+        isAttacking = true;
+        lastAttackTime = Time.time;
+        agent.isStopped = true;
+
+       
+        Vector3 predictedPos = player.position;
+
+        if (playerRb != null)
+        {
+            predictedPos += playerRb.linearVelocity * predictionFactor;
+        }
+
+        Vector3 lookDirection = (predictedPos - transform.position).normalized;
+        lookDirection.y = 0f;
+
+        if (lookDirection != Vector3.zero)
+        {
+            transform.rotation = Quaternion.LookRotation(lookDirection);
+        }
+
+        animator.SetTrigger("Attack");
+
+        yield return new WaitForSeconds(attackWindupTimer);
+
+        isAttacking = false;
+        agent.isStopped = false;
+    }
+
     private void OnGUI()
     {
         Vector3 screenPos = Camera.main.WorldToScreenPoint(transform.position + Vector3.up * 2f);
@@ -372,6 +422,14 @@ public class EnemyAI : MonoBehaviour
         {
             Gizmos.color = Color.red;
             Gizmos.DrawLine(transform.position, player.position);
+        }
+
+        if (player != null && playerRb != null)
+        {
+            Vector3 predicted = player.position + playerRb.linearVelocity * predictionFactor;
+            Gizmos.color = Color.magenta;
+            Gizmos.DrawSphere(predicted, 0.2f);
+            Gizmos.DrawLine(transform.position, predicted);
         }
     }
 }
