@@ -3,52 +3,74 @@ using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.UI;
 using UnityEngine.Rendering;
 
 public class EnemyAI : MonoBehaviour
 {
     public enum EnemyState { Patrolling, Suspicious, Chasing, Returning}
     private EnemyState currentState = EnemyState.Patrolling;
-    
 
+
+    [Header("References")]
+    public Transform player;
+    private Rigidbody playerRb;
+    private Animator animator;
+    private NavMeshAgent agent;
+    public Slider suspicionSlider;
+
+    [Header("Patrolling")]
     public Transform[] patrolPoints;
     public float patrolSpeed = 2f;
-    public float chaseSpeed = 4f;
+    public float waitDuration = 2f;
+    public float lookAngle = 30f;
+    public float lookSpeed = 2f;
+    private int currentPointIndex = 0;
+    private float waitTimer = 0f;
+    private bool isWaiting = false;
+    private Quaternion initialRotation;
+    private bool isReturnRotation = false;
+    private float rotationReturnSpeed = 180f;
+
+    [Header("Vision")]
     public float viewDistance = 8f;
     public float viewAngle = 90f;
     public LayerMask playerLayer;
     public LayerMask obstructionMask;
-    public Transform player;
-    public float loseSightTime = 3f;
+
+    [Header("Suspicion")]
     public float suspicionDuration = 4f;
     public float maxSuspicion = 100f;
     public float suspicionIncreaseRate = 40f;
     public float suspicionDecreaseRate = 20f;
-    public float waitDuration = 2f;
-    public float lookAngle = 30f;
-    public float lookSpeed = 2f;
+    private float currentSuspicion = 0f;
+    private float suspicionTimer = 0f;
+    private bool playerInSusRange = false;
+
+    [Header("Chasing")]
+    public float chaseSpeed = 4f;
+    public float loseSightTime = 3f;
+    public float predictionFactor = 0.4f;
+    private Vector3 lastKnownPosition;
+    private float timeSinceLastSeen = 0f;
+    private Vector3 lastPlayerPosition;
+    private Vector3 playerVelocity;
+
+    [Header("Combat")]
     public float attackRange = 1.5f;
     public float attackCooldown = 1.5f;
     public float attackWindupTimer = 0.5f;
-    public float predictionFactor = 0.4f;
-
     private float lastAttackTime = -Mathf.Infinity;
     private bool isAttacking = false;
-    private NavMeshAgent agent;
-    private float currentSuspicion = 0f;
-    private bool playerInSusRange = false;
-    private float suspicionTimer = 0f;
-    private int currentPointIndex = 0;
-    private Vector3 lastKnownPosition;
-    private float timeSinceLastSeen = 0f;
-    private Animator animator;
-    private float waitTimer = 0f;
-    private bool isWaiting = false;
-    private Quaternion initialRotation;
-    private bool isReturnRotation;
-    private float rotationReturnSpeed = 180f;
-    private float currentNoisePriority;
-    Rigidbody playerRb;
+
+    [Header("Noise Reaction")]
+    private float currentNoisePriority = 0f;
+
+    [Header("Noise Investigation")]
+    public float noiseLookDuration = 2f;
+    private Vector3 noiseDirection;
+    private float noiseLookTimer = 0f;
+    private bool isInvestigatingNoise = false;
 
 
     private void Start()
@@ -62,6 +84,8 @@ public class EnemyAI : MonoBehaviour
         animator = GetComponent<Animator>();
 
         playerRb = player.GetComponent<Rigidbody>();
+
+        
 
     }
 
@@ -100,9 +124,34 @@ public class EnemyAI : MonoBehaviour
             StartCoroutine(PerformAttack());
         }
 
+        playerVelocity = (player.position - lastPlayerPosition) / Time.deltaTime;
+        lastPlayerPosition = player.position;
+
+        
+
         UpdateSuspicionMeter();
+        UpdateSuspicionMeterColor();
         //Debug.Log("Enemy State: " +  currentState);
 
+    }
+
+    bool MoveTowardsTarget(Vector3 target, float stopDistance)
+    {
+        target.y = transform.position.y;
+        float distance = Vector3.Distance(transform.position, target);
+
+        if (distance > stopDistance)
+        {
+            agent.isStopped = false;
+            agent.SetDestination(target);
+            return false;
+        }
+        else
+        {
+            agent.isStopped = true;
+            agent.ResetPath();
+            return true;
+        }
     }
 
     void Patrol()
@@ -149,16 +198,11 @@ public class EnemyAI : MonoBehaviour
         }
         
         Vector3 target = patrolPoints[currentPointIndex].position;
-        target.y = transform.position.y;
-        agent.SetDestination(target);
-
-        if (Vector3.Distance(transform.position, target) < 0.2f && !isWaiting)
+        if (MoveTowardsTarget(target, 0.2f))
         {
             isWaiting = true;
             waitTimer = 0;
             initialRotation = transform.rotation;
-            agent.ResetPath();
-            //currentPointIndex = (currentPointIndex + 1) % patrolPoints.Length;
         }
     }
 
@@ -174,16 +218,34 @@ public class EnemyAI : MonoBehaviour
         {
             if (!Physics.Linecast(transform.position, player.position, obstructionMask))
             {
-                currentState = EnemyState.Chasing;
-                //lastKnownPosition = player.position;
-                timeSinceLastSeen = 0f;
+                if (currentState != EnemyState.Chasing) 
+                {
+                    currentState = EnemyState.Chasing; 
+                    timeSinceLastSeen = 0f;
+                }
             }
         }
     }
 
     void ChasePlayer()
     {
-        agent.SetDestination(player.position);
+        if (!MoveTowardsTarget(player.position, attackRange))
+        {
+            float distanceToPlayer = Vector3.Distance(transform.position, player.position);
+
+            if (distanceToPlayer > attackRange)
+            {
+                agent.isStopped = false;
+                float predictionTime = 0.5f;
+                Vector3 predictedPosition = player.position + playerVelocity * predictionTime; 
+                agent.SetDestination(predictedPosition);
+            }
+            else
+            {
+                agent.isStopped = true;
+                agent.ResetPath();
+            }
+        }
 
         if (!CanSeePlayer())
         {
@@ -205,9 +267,31 @@ public class EnemyAI : MonoBehaviour
 
     void InvestigateSuspicion()
     {
-        agent.SetDestination(lastKnownPosition);
+       if (isInvestigatingNoise)
+        {
+           
+            Vector3 lookTarget = transform.position + noiseDirection;
+            Vector3 lookDirection = (lookTarget - transform.position).normalized;
+            lookDirection.y = 0f; // Prevent tilting
+            Quaternion lookRotation = Quaternion.LookRotation(lookDirection);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, lookRotation, rotationReturnSpeed * Time.deltaTime);
 
+            noiseLookTimer -= Time.deltaTime;
+            if (noiseLookTimer <= 0f)
+            {
+                isInvestigatingNoise = false;
+                currentNoisePriority = 0f;
+                currentState = EnemyState.Returning;
+                agent.isStopped = false;
+            }
+
+            return;
+        }
+
+        
+        agent.SetDestination(lastKnownPosition);
         suspicionTimer -= Time.deltaTime;
+
         if (Vector3.Distance(transform.position, lastKnownPosition) < 0.5f || suspicionTimer <= 0f)
         {
             currentState = EnemyState.Returning;
@@ -217,10 +301,7 @@ public class EnemyAI : MonoBehaviour
     void ReturnToPatrol()
     {
         Vector3 target = patrolPoints[currentPointIndex].position;
-        target.y = transform.position.y;
-        agent.SetDestination(target);
-
-        if (Vector3.Distance(transform.position, target) < 0.2f)
+        if (MoveTowardsTarget(target, 0.2f))
         {
             currentState = EnemyState.Patrolling;
         }
@@ -252,63 +333,56 @@ public class EnemyAI : MonoBehaviour
         float distance = Vector3.Distance(transform.position, sourcePosition);
         float priority = volume / distance;
 
-        if (currentState == EnemyState.Chasing)
-        {
+        if (currentState == EnemyState.Chasing || priority <= currentNoisePriority)
             return;
-        }
 
-        if (priority <= currentNoisePriority)
-        {
-            return;
-        }
+        currentNoisePriority = priority;
+        noiseDirection = (sourcePosition - transform.position).normalized;
+        noiseLookTimer = noiseLookDuration;
+        isInvestigatingNoise = true;
+        currentState = EnemyState.Suspicious;
+        agent.isStopped = true;
 
-        if (priority > currentNoisePriority)
-        {
-            currentNoisePriority = priority;
-            lastKnownPosition = sourcePosition;
-            currentState = EnemyState.Suspicious;
-            suspicionTimer = suspicionDuration;
-            agent.SetDestination(lastKnownPosition);
-        }
     }
 
     void UpdateSuspicionMeter()
     {
-        if (currentState == EnemyState.Patrolling || currentState == EnemyState.Suspicious)
-        {
-            if (CanSeePlayer())
-            {
-                playerInSusRange = true;
-                currentSuspicion += suspicionIncreaseRate * Time.deltaTime;
-                
+        
 
-                if (currentSuspicion >= maxSuspicion)
-                {
-                    currentSuspicion = maxSuspicion;
-                    currentState = EnemyState.Chasing;
-                    timeSinceLastSeen = 0f;
-                }
-                else if (currentState != EnemyState.Suspicious)
-                {
-                    currentState = EnemyState.Suspicious;
-                }
-            }
-            else
+        if (CanSeePlayer())
+        {
+            playerInSusRange = true;
+            currentSuspicion += suspicionIncreaseRate * Time.deltaTime;
+
+            if (currentSuspicion >= maxSuspicion || timeSinceLastSeen > 1f) 
             {
-                playerInSusRange = false;
-                if (currentSuspicion > 0)
+                currentSuspicion = maxSuspicion;
+                if (currentState != EnemyState.Chasing) 
                 {
-                    currentSuspicion -= suspicionDecreaseRate * Time.deltaTime;
-                    if (currentSuspicion <= 0)
-                    {
-                        currentSuspicion = 0;
-                        if (currentState == EnemyState.Suspicious && !playerInSusRange)
-                        {
-                            currentState = EnemyState.Returning;
-                        }
-                    }
+                    currentState = EnemyState.Chasing;
                 }
             }
+            else if (currentState != EnemyState.Suspicious)
+            {
+                currentState = EnemyState.Suspicious;
+            }
+        }
+        else
+        {
+            playerInSusRange = false;
+            if (currentSuspicion > 0f)
+            {
+                currentSuspicion -= suspicionDecreaseRate * Time.deltaTime;
+                if (currentSuspicion <= 0f && currentState == EnemyState.Suspicious)
+                {
+                    currentState = EnemyState.Returning;
+                }
+            }
+        }
+
+        if (suspicionSlider != null)
+        {
+            suspicionSlider.value = currentSuspicion;
         }
     }
 
@@ -335,7 +409,7 @@ public class EnemyAI : MonoBehaviour
         return Vector3.Distance(transform.position, player.position) <= attackRange;
     }
 
-    [System.Obsolete]
+    
     IEnumerator PerformAttack()
     {
         isAttacking = true;
@@ -362,9 +436,30 @@ public class EnemyAI : MonoBehaviour
 
         yield return new WaitForSeconds(attackWindupTimer);
 
+        lastAttackTime = Time.time;
         isAttacking = false;
         agent.isStopped = false;
     }
+
+    void UpdateSuspicionMeterColor()
+    {
+        if (suspicionSlider != null)
+        {
+            if (currentState == EnemyState.Suspicious)
+            {
+                suspicionSlider.fillRect.GetComponentInChildren<Image>().color = Color.yellow;
+            }
+            else if (currentState == EnemyState.Chasing)
+            {
+                suspicionSlider.fillRect.GetComponentInChildren<Image>().color = Color.red;
+            }
+            else
+            {
+                suspicionSlider.fillRect.GetComponentInChildren<Image>().color = Color.green;
+            }
+        }
+    }
+
 
     private void OnGUI()
     {
@@ -424,12 +519,6 @@ public class EnemyAI : MonoBehaviour
             Gizmos.DrawLine(transform.position, player.position);
         }
 
-        if (player != null && playerRb != null)
-        {
-            Vector3 predicted = player.position + playerRb.linearVelocity * predictionFactor;
-            Gizmos.color = Color.magenta;
-            Gizmos.DrawSphere(predicted, 0.2f);
-            Gizmos.DrawLine(transform.position, predicted);
-        }
+        
     }
 }
