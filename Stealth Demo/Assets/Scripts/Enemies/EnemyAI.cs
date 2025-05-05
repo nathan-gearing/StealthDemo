@@ -8,8 +8,8 @@ using UnityEngine.Rendering;
 
 public class EnemyAI : MonoBehaviour
 {
-    public enum EnemyState { Patrolling, Suspicious, Chasing, Returning}
-    private EnemyState currentState = EnemyState.Patrolling;
+    //public enum EnemyState { Patrolling, Suspicious, Chasing, Returning}
+    //private EnemyState currentState = EnemyState.Patrolling;
 
 
     [Header("References")]
