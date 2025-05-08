@@ -12,7 +12,7 @@ public class EnemyAI : MonoBehaviour
     //private EnemyState currentState = EnemyState.Patrolling;
 
 
-    [Header("References")]
+    /*[Header("References")]
     public Transform player;
     private Rigidbody playerRb;
     private Animator animator;
@@ -87,12 +87,12 @@ public class EnemyAI : MonoBehaviour
 
         
 
-    }
+    }*/
 
     // Update is called once per frame
     void Update()
     {
-        switch (currentState)
+        /*switch (currentState)
         {
             case EnemyState.Patrolling:
                 agent.speed = patrolSpeed;
@@ -131,11 +131,11 @@ public class EnemyAI : MonoBehaviour
 
         UpdateSuspicionMeter();
         UpdateSuspicionMeterColor();
-        //Debug.Log("Enemy State: " +  currentState);
+        //Debug.Log("Enemy State: " +  currentState);*/
 
     }
 
-    bool MoveTowardsTarget(Vector3 target, float stopDistance)
+    /*bool MoveTowardsTarget(Vector3 target, float stopDistance)
     {
         target.y = transform.position.y;
         float distance = Vector3.Distance(transform.position, target);
@@ -520,5 +520,5 @@ public class EnemyAI : MonoBehaviour
         }
 
         
-    }
+    }*/
 }

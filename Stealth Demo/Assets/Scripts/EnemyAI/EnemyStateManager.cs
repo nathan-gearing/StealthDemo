@@ -21,12 +21,17 @@ public class EnemyStateManager : MonoBehaviour
     public float attackCooldown = 1.5f;
     public float suspicion = 0f;
 
+    [Header("Movement")]
+    public float walkSpeed = 3f;
+    public float runSpeed = 7f;
+
     [Header("Patrol")]
     public Transform[] patrolPoints;
 
-    [HideInInspector] public float suspicionTimer = 0f;
+    [HideInInspector]
+    public float suspicionTimer = 0f;
     private float attackTimer = 0f;
-    private int currentPatrolIndex = 0;
+    public int currentPatrolIndex = 0;
 
     private EnemyState currentState;
 
