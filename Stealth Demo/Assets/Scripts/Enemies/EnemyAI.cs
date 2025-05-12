@@ -8,11 +8,11 @@ using UnityEngine.Rendering;
 
 public class EnemyAI : MonoBehaviour
 {
-    //public enum EnemyState { Patrolling, Suspicious, Chasing, Returning}
-    //private EnemyState currentState = EnemyState.Patrolling;
+    public enum EnemyState { Patrolling, Suspicious, Chasing, Returning}
+    private EnemyState currentState = EnemyState.Patrolling;
 
 
-    /*[Header("References")]
+    [Header("References")]
     public Transform player;
     private Rigidbody playerRb;
     private Animator animator;
@@ -87,12 +87,12 @@ public class EnemyAI : MonoBehaviour
 
         
 
-    }*/
+    }
 
     // Update is called once per frame
     void Update()
     {
-        /*switch (currentState)
+        switch (currentState)
         {
             case EnemyState.Patrolling:
                 agent.speed = patrolSpeed;
@@ -116,7 +116,7 @@ public class EnemyAI : MonoBehaviour
 
         }
 
-        float speed = agent.velocity.magnitude;
+        float speed = (isWaiting && isReturnRotation) ? 0f : agent.velocity.magnitude;
         animator.SetFloat("Speed", speed);
 
         if (!isAttacking && Time.time - lastAttackTime >= attackCooldown && InAttackRange())
@@ -127,15 +127,18 @@ public class EnemyAI : MonoBehaviour
         playerVelocity = (player.position - lastPlayerPosition) / Time.deltaTime;
         lastPlayerPosition = player.position;
 
-        
+        if (currentState == EnemyState.Suspicious && isInvestigatingNoise)
+        {
+            InvestigateSuspicion();
+        }
 
         UpdateSuspicionMeter();
         UpdateSuspicionMeterColor();
-        //Debug.Log("Enemy State: " +  currentState);*/
+        //Debug.Log("Enemy State: " +  currentState);
 
     }
 
-    /*bool MoveTowardsTarget(Vector3 target, float stopDistance)
+    bool MoveTowardsTarget(Vector3 target, float stopDistance)
     {
         target.y = transform.position.y;
         float distance = Vector3.Distance(transform.position, target);
@@ -267,35 +270,39 @@ public class EnemyAI : MonoBehaviour
 
     void InvestigateSuspicion()
     {
-       if (isInvestigatingNoise)
-        {
-           
-            Vector3 lookTarget = transform.position + noiseDirection;
-            Vector3 lookDirection = (lookTarget - transform.position).normalized;
-            lookDirection.y = 0f; // Prevent tilting
-            Quaternion lookRotation = Quaternion.LookRotation(lookDirection);
-            transform.rotation = Quaternion.RotateTowards(transform.rotation, lookRotation, rotationReturnSpeed * Time.deltaTime);
+        if (isInvestigatingNoise)
+         {
 
-            noiseLookTimer -= Time.deltaTime;
-            if (noiseLookTimer <= 0f)
-            {
-                isInvestigatingNoise = false;
-                currentNoisePriority = 0f;
-                currentState = EnemyState.Returning;
-                agent.isStopped = false;
-            }
+             Vector3 lookTarget = transform.position + noiseDirection;
+             Vector3 lookDirection = (lookTarget - transform.position).normalized;
+             lookDirection.y = 0f; // Prevent tilting
+             Quaternion lookRotation = Quaternion.LookRotation(lookDirection);
+             transform.rotation = Quaternion.RotateTowards(transform.rotation, lookRotation, rotationReturnSpeed * Time.deltaTime);
 
-            return;
-        }
+             noiseLookTimer -= Time.deltaTime;
+             if (noiseLookTimer <= 0f)
+             {
+                 isInvestigatingNoise = false;
+                 currentNoisePriority = 0f;
+                 currentState = EnemyState.Returning;
+                 agent.isStopped = false;
+             }
 
-        
-        agent.SetDestination(lastKnownPosition);
-        suspicionTimer -= Time.deltaTime;
+             return;
 
-        if (Vector3.Distance(transform.position, lastKnownPosition) < 0.5f || suspicionTimer <= 0f)
-        {
-            currentState = EnemyState.Returning;
-        }
+
+         }
+
+
+         agent.SetDestination(lastKnownPosition);
+         suspicionTimer -= Time.deltaTime;
+
+         if (Vector3.Distance(transform.position, lastKnownPosition) < 0.5f || suspicionTimer <= 0f)
+         {
+             currentState = EnemyState.Returning;
+         }
+
+       
     }
 
     void ReturnToPatrol()
@@ -331,6 +338,7 @@ public class EnemyAI : MonoBehaviour
     public void OnHearNoise(Vector3 sourcePosition, float volume)
     {
         float distance = Vector3.Distance(transform.position, sourcePosition);
+        if (distance == 0f) distance = 0.01f;
         float priority = volume / distance;
 
         if (currentState == EnemyState.Chasing || priority <= currentNoisePriority)
@@ -343,18 +351,24 @@ public class EnemyAI : MonoBehaviour
         currentState = EnemyState.Suspicious;
         agent.isStopped = true;
 
+        agent.SetDestination(sourcePosition);
+
     }
 
     void UpdateSuspicionMeter()
     {
-        
+
+        if (currentState == EnemyState.Chasing) return;
+
+        float distanceToPlayer = Vector3.Distance(transform.position, player.position);
 
         if (CanSeePlayer())
         {
-            playerInSusRange = true;
-            currentSuspicion += suspicionIncreaseRate * Time.deltaTime;
+            float proximityFator = Mathf.Clamp01(1f - (distanceToPlayer / viewDistance));
+            float dynamicIncreaseRate = suspicionIncreaseRate * (0.5f + 0.5f * proximityFator);
+            currentSuspicion += dynamicIncreaseRate * Time.deltaTime;
 
-            if (currentSuspicion >= maxSuspicion || timeSinceLastSeen > 1f) 
+            if (currentSuspicion >= maxSuspicion) 
             {
                 currentSuspicion = maxSuspicion;
                 if (currentState != EnemyState.Chasing) 
@@ -369,13 +383,13 @@ public class EnemyAI : MonoBehaviour
         }
         else
         {
-            playerInSusRange = false;
-            if (currentSuspicion > 0f)
+            currentSuspicion -= suspicionDecreaseRate * Time.deltaTime;
+            if (currentSuspicion <= 0)
             {
-                currentSuspicion -= suspicionDecreaseRate * Time.deltaTime;
-                if (currentSuspicion <= 0f && currentState == EnemyState.Suspicious)
+                currentSuspicion = 0 ;
+                if (currentState == EnemyState.Suspicious)
                 {
-                    currentState = EnemyState.Returning;
+                    currentState = EnemyState.Patrolling;
                 }
             }
         }
@@ -520,5 +534,5 @@ public class EnemyAI : MonoBehaviour
         }
 
         
-    }*/
+    }
 }

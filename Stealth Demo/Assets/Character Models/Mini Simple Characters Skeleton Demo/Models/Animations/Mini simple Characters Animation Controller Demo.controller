@@ -40,9 +40,9 @@ AnimatorStateTransition:
   m_PrefabAsset: {fileID: 0}
   m_Name: 
   m_Conditions:
-  - m_ConditionMode: 1
-    m_ConditionEvent: isRunning
-    m_EventTreshold: 0
+  - m_ConditionMode: 3
+    m_ConditionEvent: Speed
+    m_EventTreshold: 6
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 254414093865573941}
   m_Solo: 0
@@ -93,9 +93,6 @@ AnimatorStateTransition:
   - m_ConditionMode: 4
     m_ConditionEvent: Speed
     m_EventTreshold: 6
-  - m_ConditionMode: 1
-    m_ConditionEvent: isWalking
-    m_EventTreshold: 0
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 2026086550461400575}
   m_Solo: 0
@@ -118,12 +115,9 @@ AnimatorStateTransition:
   m_PrefabAsset: {fileID: 0}
   m_Name: 
   m_Conditions:
-  - m_ConditionMode: 2
-    m_ConditionEvent: isWalking
-    m_EventTreshold: 0.1
   - m_ConditionMode: 4
     m_ConditionEvent: Speed
-    m_EventTreshold: 0
+    m_EventTreshold: 0.1
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 4585803908276343055}
   m_Solo: 0
@@ -146,9 +140,12 @@ AnimatorStateTransition:
   m_PrefabAsset: {fileID: 0}
   m_Name: 
   m_Conditions:
-  - m_ConditionMode: 1
-    m_ConditionEvent: isWalking
+  - m_ConditionMode: 3
+    m_ConditionEvent: Speed
     m_EventTreshold: 0.1
+  - m_ConditionMode: 4
+    m_ConditionEvent: Speed
+    m_EventTreshold: 7
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 2026086550461400575}
   m_Solo: 0
@@ -244,9 +241,12 @@ AnimatorStateTransition:
   m_PrefabAsset: {fileID: 0}
   m_Name: 
   m_Conditions:
-  - m_ConditionMode: 1
-    m_ConditionEvent: isWalking
+  - m_ConditionMode: 3
+    m_ConditionEvent: Speed
     m_EventTreshold: 0.1
+  - m_ConditionMode: 4
+    m_ConditionEvent: Speed
+    m_EventTreshold: 7
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 2026086550461400575}
   m_Solo: 0
@@ -300,9 +300,6 @@ AnimatorStateTransition:
   - m_ConditionMode: 3
     m_ConditionEvent: Speed
     m_EventTreshold: 6
-  - m_ConditionMode: 1
-    m_ConditionEvent: isRunning
-    m_EventTreshold: 0
   m_DstStateMachine: {fileID: 0}
   m_DstState: {fileID: 254414093865573941}
   m_Solo: 0
